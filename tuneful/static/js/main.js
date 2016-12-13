@@ -158,6 +158,7 @@ Tuneful.prototype.onUploadProgress = function(event) {
 
 Tuneful.prototype.getSongs = function() {
     // Make a get request to list all of the songs
+    console.log("get songs");
     var ajax = $.ajax('/api/songs', {
         type: 'GET',
         dataType: 'json'
@@ -168,6 +169,7 @@ Tuneful.prototype.getSongs = function() {
 
 Tuneful.prototype.onGetSongsDone = function(data) {
     // Update the songs array, and update the user interface
+    console.log(data);
     this.songs = data;
     this.updateSongView();
 };

@@ -4,7 +4,7 @@ import shutil
 import json
 try: from urllib.parse import urlparse
 except ImportError: from urlparse import urlparse # Py2 compatibility
-from io import StringIO
+from io import StringIO, BytesIO
 
 import sys; print(list(sys.modules.keys()))
 # Configure our app to use the testing databse
@@ -63,6 +63,40 @@ class TestAPI(unittest.TestCase):
         bornThisWay = data[1]
         self.assertEqual(bornThisWay["file"]["name"], "bornThisWay.mp3")
         
+    def test_get_song_by_id(self):
+        stronger = models.File(name="stronger.mp3")
+        song = models.Song()
+        stronger.song = song
+        
+        bornThisWay = models.File(name="bornThisWay.mp3")
+        song2 = models.Song()
+        bornThisWay.song = song2
+        
+        session.add_all([stronger, song, bornThisWay, song2])
+        session.commit()
+        
+        response = self.client.get("/api/songs/{}".format(stronger.id), headers=[("Accept", "application/json")])
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/json")
+        
+        data = json.loads(response.data.decode("ascii"))
+        self.assertEqual(len(data), 1)
+        
+        stronger = data[0]
+        self.assertEqual(stronger["file"]["name"], "stronger.mp3")
+        
+    def test_get_nonexistent_song(self):
+        
+        response = self.client.get("/api/songs/1", headers=[("Accept", "application/json")])
+        
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.mimetype, "application/json")
+
+        data = json.loads(response.data.decode("ascii"))
+        self.assertEqual(data["message"], "Could not find song with id 1")  
+        
+        
     def test_post_song(self): 
         """Adding a new song"""
         
@@ -99,3 +133,37 @@ class TestAPI(unittest.TestCase):
         song = songs[0]
         self.assertEqual(song.file.name, "stronger.mp3")
         self.assertEqual(song.id, 1)
+        
+    def test_get_uploaded_file(self):
+        path = upload_path("test.txt")
+        with open(path, "wb") as f: 
+            f.write(b"File contents")
+            
+        response = self.client.get("uploads/test.txt")    
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "text/plain")
+        self.assertEqual(response.data, b"File contents")
+        
+    def test_file_upload(self):
+        data = {
+            "file": (BytesIO(b"File contents"), "test.txt")
+        }
+
+        response = self.client.post("/api/files",
+            data=data,
+            content_type="multipart/form-data",
+            headers=[("Accept", "application/json")]
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.mimetype, "application/json")
+
+        data = json.loads(response.data.decode("ascii"))
+        self.assertEqual(urlparse(data["path"]).path, "/uploads/test.txt")
+
+        path = upload_path("test.txt")
+        self.assertTrue(os.path.isfile(path))
+        with open(path, "rb") as f:
+            contents = f.read()
+        self.assertEqual(contents, b"File contents")    
